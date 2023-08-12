@@ -232,7 +232,7 @@ REFINER = click.Choice(sorted(refiner_manager.names()))
 
 dirs = AppDirs('subliminal')
 cache_file = 'subliminal.dbm'
-config_file = 'config.ini'
+config_file = os.path.expanduser( '~/.config/subliminal/config.ini' )
 
 
 @click.group(context_settings={'max_content_width': 100}, epilog='Suggestions and bug reports are greatly appreciated: '
@@ -256,6 +256,17 @@ def subliminal(ctx, addic7ed, legendastv, opensubtitles, omdb, cache_dir, debug)
         if not os.path.isdir(cache_dir):
             raise
 
+
+    #
+    ## create the CONFIG directory if not there
+    try:
+      os.makedirs( os.path.dirname( config_file ) )
+    except OSError: pass
+    #
+    ## and READ configuration
+    conf = Config( config_file )
+    conf.read( )
+
     # configure cache
     region.configure('dogpile.cache.dbm', expiration_time=timedelta(days=30),
                      arguments={'filename': os.path.join(cache_dir, cache_file), 'lock_factory': MutexLock})
@@ -268,7 +279,7 @@ def subliminal(ctx, addic7ed, legendastv, opensubtitles, omdb, cache_dir, debug)
         logging.getLogger('subliminal').setLevel(logging.DEBUG)
 
     ctx.obj = {
-        'provider_configs': {},
+        'provider_configs': conf.provider_configs,
         'refiner_configs': {}
     }
 
@@ -299,6 +310,25 @@ def cache(ctx, clear_subliminal):
     else:
         click.echo('Nothing done.')
 
+@subliminal.command( )
+@click.option('--addic7ed', type=click.STRING, nargs=2, metavar='USERNAME PASSWORD', help='Addic7ed configuration ADD TO CONFIGURATION.')
+@click.option('--legendastv', type=click.STRING, nargs=2, metavar='USERNAME PASSWORD', help='LegendasTV configuration ADD TO CONFIGURATION.')
+@click.option('--opensubtitles', type=click.STRING, nargs=2, metavar='USERNAME PASSWORD',
+              help='OpenSubtitles configuration ADD TO CONFIGURATION.')
+@click.pass_context
+def config( ctx, addic7ed, legendastv, opensubtitles ):
+  conf = Config( config_file )
+  conf.read( )
+  provider_configs = conf.provider_configs
+  if opensubtitles:
+    provider_configs[ 'opensubtitles' ] = {'username': opensubtitles[0], 'password': opensubtitles[1] }
+    provider_configs[ 'opensubtitlesvip' ] = {'username': opensubtitles[0], 'password': opensubtitles[1] }
+  if addic7ed:
+    provider_configs[ 'addic7ed' ] = {'username': addic7ed[0], 'password': addic7ed[1] }
+  if legendastv:
+    provider_configs[ 'legendastv' ] = {'username': legendastv[0], 'password': legendastv[1]}
+  conf.provider_configs = provider_configs
+  conf.write( )
 
 @subliminal.command()
 @click.option('-l', '--language', type=LANGUAGE, required=True, multiple=True, help='Language as IETF code, '
